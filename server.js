@@ -11,6 +11,21 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000'
 }));
 
+// 1. サーバー側のCORS設定を修正
+app.use(cors({
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'https://masa061580.github.io',
+    'https://masa061580.github.io/systematic-review-assistant/',
+    'https://masa061580.github.io/systematic-review-assistant'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// 2. プリフライトリクエスト (OPTIONS) への対応を明示的に追加
+app.options('*', cors());
+
 // ミドルウェアの設定
 app.use(express.json());
 app.use(express.static('public')); // フロントエンドファイルを提供
