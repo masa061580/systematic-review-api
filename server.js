@@ -157,7 +157,7 @@ app.get('/api/pubmed/summary', async (req, res) => {
   }
 });
 
-// PubMed フェッチ API エンドポイント (抄録取得用)
+// PubMed フェッチ API エンドポイント (抄録取得用) の修正版
 app.get('/api/pubmed/fetch', async (req, res) => {
   try {
     const { id, rettype = 'abstract' } = req.query;
@@ -171,6 +171,7 @@ app.get('/api/pubmed/fetch', async (req, res) => {
 
     const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi`, {
       params: {
+        db: 'pubmed',
         id,
         rettype,
         retmode: 'text',
@@ -190,18 +191,13 @@ app.get('/api/pubmed/fetch', async (req, res) => {
       abstract: abstractText
     });
   } catch (error) {
-    console.error('PubMed フェッチ API エラー:', error.response?.data || error.message);
+    console.error(`PubMed フェッチ API エラー:`, error.response?.data || error.message);
     
-    if (error.response) {
-      res.status(error.response.status).json({ 
-        error: 'PubMedフェッチリクエストに失敗しました',
-        details: error.response.data 
-      });
-    } else if (error.request) {
-      res.status(503).json({ error: 'サービスが利用できません' });
-    } else {
-      res.status(500).json({ error: '内部サーバーエラー' });
-    }
+    // エラーが発生した場合でも空の抄録を返す（クライアント側でのエラー処理を容易にするため）
+    res.json({ 
+      pmid: id,
+      abstract: ""
+    });
   }
 });
 
