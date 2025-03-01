@@ -6,29 +6,25 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORSの設定を一元化
+// CORSの設定を強化
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000'
-}));
-
-// 1. サーバー側のCORS設定を修正
-app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://masa061580.github.io',
-    'https://masa061580.github.io/systematic-review-assistant/',
-    'https://masa061580.github.io/systematic-review-assistant'
-  ],
+  origin: '*', // すべてのオリジンからのリクエストを許可（本番環境では絞る）
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
-// 2. プリフライトリクエスト (OPTIONS) への対応を明示的に追加
+// プリフライトリクエスト (OPTIONS) への対応
 app.options('*', cors());
 
 // ミドルウェアの設定
 app.use(express.json());
-app.use(express.static('public')); // フロントエンドファイルを提供
+app.use(express.static('public'));
+
+// ルートエンドポイント（サーバー稼働確認用）
+app.get('/', (req, res) => {
+  res.send('Systematic Review API Server is running');
+});
 
 // OpenAI API エンドポイント
 app.post('/api/openai', async (req, res) => {
@@ -38,13 +34,20 @@ app.post('/api/openai', async (req, res) => {
       return res.status(400).json({ error: '不正なリクエストボディです' });
     }
 
+    console.log('OpenAI APIリクエスト受信:', {
+      model: req.body.model,
+      messagesCount: req.body.messages.length
+    });
+
     const response = await axios.post('https://api.openai.com/v1/chat/completions', req.body, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
-      timeout: 10000 // タイムアウトを追加
+      timeout: 30000 // タイムアウトを30秒に延長
     });
+    
+    console.log('OpenAI APIレスポンス成功');
     res.json(response.data);
   } catch (error) {
     console.error('OpenAI API エラー:', error.response?.data || error.message);
@@ -76,6 +79,8 @@ app.get('/api/pubmed/search', async (req, res) => {
       return res.status(400).json({ error: '検索キーワードが必要です' });
     }
 
+    console.log('PubMed検索リクエスト:', { term });
+
     const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi`, {
       params: {
         term,
@@ -83,8 +88,10 @@ app.get('/api/pubmed/search', async (req, res) => {
         format: 'json',
         api_key: process.env.PUBMED_API_KEY
       },
-      timeout: 10000 // タイムアウトを追加
+      timeout: 15000 // タイムアウトを15秒に設定
     });
+    
+    console.log('PubMed検索レスポンス成功:', { count: response.data?.esearchresult?.count || 0 });
     res.json(response.data);
   } catch (error) {
     console.error('PubMed検索 API エラー:', error.response?.data || error.message);
@@ -108,9 +115,11 @@ app.get('/api/pubmed/summary', async (req, res) => {
     const { id } = req.query;
 
     // IDのバリデーション
-    if (!id || !/^\d+$/.test(id)) {
+    if (!id || !/^[\d,]+$/.test(id)) {
       return res.status(400).json({ error: '無効なPubMed IDです' });
     }
+
+    console.log('PubMed サマリーリクエスト:', { id });
 
     const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi`, {
       params: {
@@ -118,8 +127,10 @@ app.get('/api/pubmed/summary', async (req, res) => {
         format: 'json',
         api_key: process.env.PUBMED_API_KEY
       },
-      timeout: 10000 // タイムアウトを追加
+      timeout: 15000 // タイムアウトを15秒に設定
     });
+    
+    console.log('PubMed サマリーレスポンス成功');
     res.json(response.data);
   } catch (error) {
     console.error('PubMed サマリー API エラー:', error.response?.data || error.message);
@@ -135,6 +146,15 @@ app.get('/api/pubmed/summary', async (req, res) => {
       res.status(500).json({ error: '内部サーバーエラー' });
     }
   }
+});
+
+// サーバーの状態確認用エンドポイント
+app.get('/api/status', (req, res) => {
+  res.json({
+    status: 'ok',
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 未定義のルートハンドリング
