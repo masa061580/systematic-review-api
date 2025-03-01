@@ -193,9 +193,12 @@ app.get('/api/pubmed/fetch', async (req, res) => {
   } catch (error) {
     console.error(`PubMed フェッチ API エラー:`, error.response?.data || error.message);
     
+    // 重要な修正: エラー処理でもリクエストから id を取得
+    const requestId = req.query.id || 'unknown';
+    
     // エラーが発生した場合でも空の抄録を返す（クライアント側でのエラー処理を容易にするため）
     res.json({ 
-      pmid: id,
+      pmid: requestId,
       abstract: ""
     });
   }
