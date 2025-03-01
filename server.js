@@ -78,7 +78,7 @@ app.post('/api/openai', async (req, res) => {
   }
 });
 
-// PubMed 検索 API エンドポイント
+// PubMed 検索 API エンドポイント（修正版）
 app.get('/api/pubmed/search', async (req, res) => {
   try {
     const { term } = req.query;
@@ -93,7 +93,7 @@ app.get('/api/pubmed/search', async (req, res) => {
     const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi`, {
       params: {
         term,
-        retmax: Math.min(parseInt(req.query.retmax) || 30, 100), // 最大件数を制限
+        retmax: Math.min(parseInt(req.query.retmax) || 100, 200), // 最大件数を100から200に増加
         format: 'json',
         api_key: process.env.PUBMED_API_KEY
       },
@@ -118,7 +118,7 @@ app.get('/api/pubmed/search', async (req, res) => {
   }
 });
 
-// PubMed サマリー API エンドポイント
+// PubMed サマリー API エンドポイント（修正版）
 app.get('/api/pubmed/summary', async (req, res) => {
   try {
     const { id } = req.query;
@@ -136,7 +136,7 @@ app.get('/api/pubmed/summary', async (req, res) => {
         format: 'json',
         api_key: process.env.PUBMED_API_KEY
       },
-      timeout: 15000 // タイムアウトを15秒に設定
+      timeout: 20000 // タイムアウトを15秒から20秒に延長
     });
     
     console.log('PubMed サマリーレスポンス成功');
