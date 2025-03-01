@@ -3,16 +3,6 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 
-// デバッグモードフラグ
-const DEBUG_MODE = process.env.DEBUG_MODE === 'true' || true;
-
-// 詳細ログ出力関数
-function debugLog(...args) {
-  if (DEBUG_MODE) {
-    console.log('[DEBUG]', ...args);
-  }
-}
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -109,15 +99,6 @@ app.get('/api/pubmed/search', async (req, res) => {
       },
       timeout: 15000 // タイムアウトを15秒に設定
     });
-
-    if (DEBUG_MODE) {
-      debugLog('PubMed検索レスポンス構造:', {
-        hasEsearchresult: !!response.data.esearchresult,
-        count: response.data.esearchresult?.count || 0,
-        idlistLength: response.data.esearchresult?.idlist?.length || 0,
-        firstFewIds: response.data.esearchresult?.idlist?.slice(0, 3) || []
-      });
-    }
     
     console.log('PubMed検索レスポンス成功:', { count: response.data?.esearchresult?.count || 0 });
     res.json(response.data);
@@ -176,56 +157,50 @@ app.get('/api/pubmed/summary', async (req, res) => {
   }
 });
 
-// PubMed サマリー API エンドポイント
-app.get('/api/pubmed/summary', async (req, res) => {
+// PubMed フェッチ API エンドポイント (抄録取得用) の修正版
+app.get('/api/pubmed/fetch', async (req, res) => {
   try {
-    const { id } = req.query;
+    const { id, rettype = 'abstract' } = req.query;
 
     // IDのバリデーション
-    if (!id || !/^[\d,]+$/.test(id)) {
+    if (!id || !/^\d+$/.test(id)) {
       return res.status(400).json({ error: '無効なPubMed IDです' });
     }
 
-    console.log('PubMed サマリーリクエスト:', { id });
+    console.log('PubMed フェッチリクエスト:', { id, rettype });
 
-    const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi`, {
+    const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi`, {
       params: {
+        db: 'pubmed',
         id,
-        format: 'json',
+        rettype,
+        retmode: 'text',
         api_key: process.env.PUBMED_API_KEY
       },
       timeout: 15000 // タイムアウトを15秒に設定
     });
     
-    // レスポンス構造を詳細にログ出力
-    console.log('PubMed サマリーレスポンス構造:', JSON.stringify({
-      hasResult: !!response.data.result,
-      hasUids: response.data.result ? !!response.data.result.uids : false,
-      firstPmid: id.split(',')[0],
-      firstArticleSample: response.data.result && response.data.result[id.split(',')[0]] ? 
-        {
-          hasTitle: !!response.data.result[id.split(',')[0]].title,
-          hasAuthors: !!response.data.result[id.split(',')[0]].authors,
-          authorsSample: response.data.result[id.split(',')[0]].authors ? 
-            JSON.stringify(response.data.result[id.split(',')[0]].authors.slice(0, 1)) : 'なし'
-        } : 'データなし'
-    }, null, 2));
+    // テキスト形式のレスポンスをパース
+    const abstractText = response.data;
     
-    console.log('PubMed サマリーレスポンス成功');
-    res.json(response.data);
+    console.log('PubMed フェッチレスポンス成功');
+    
+    // 抄録テキストをJSONとして返す
+    res.json({ 
+      pmid: id,
+      abstract: abstractText
+    });
   } catch (error) {
-    console.error('PubMed サマリー API エラー:', error.response?.data || error.message);
+    console.error(`PubMed フェッチ API エラー:`, error.response?.data || error.message);
     
-    if (error.response) {
-      res.status(error.response.status).json({ 
-        error: 'PubMedサマリーリクエストに失敗しました',
-        details: error.response.data 
-      });
-    } else if (error.request) {
-      res.status(503).json({ error: 'サービスが利用できません' });
-    } else {
-      res.status(500).json({ error: '内部サーバーエラー' });
-    }
+    // 重要な修正: エラー処理でもリクエストから id を取得
+    const requestId = req.query.id || 'unknown';
+    
+    // エラーが発生した場合でも空の抄録を返す（クライアント側でのエラー処理を容易にするため）
+    res.json({ 
+      pmid: requestId,
+      abstract: ""
+    });
   }
 });
 
