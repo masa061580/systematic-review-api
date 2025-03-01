@@ -157,7 +157,7 @@ app.get('/api/pubmed/summary', async (req, res) => {
   }
 });
 
-// PubMed フェッチ API エンドポイント (抄録取得用) の修正版
+// PubMed フェッチ API エンドポイント (レート制限対策版)
 app.get('/api/pubmed/fetch', async (req, res) => {
   try {
     const { id, rettype = 'abstract' } = req.query;
@@ -168,6 +168,9 @@ app.get('/api/pubmed/fetch', async (req, res) => {
     }
 
     console.log('PubMed フェッチリクエスト:', { id, rettype });
+    
+    // リクエスト前にわずかな遅延を追加（サーバー側でのレート制限対策）
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     const response = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi`, {
       params: {
@@ -192,6 +195,37 @@ app.get('/api/pubmed/fetch', async (req, res) => {
     });
   } catch (error) {
     console.error(`PubMed フェッチ API エラー:`, error.response?.data || error.message);
+    
+    // レート制限エラーを確認
+    if (error.response && error.response.data && error.response.data.error === 'API rate limit exceeded') {
+      console.log(`レート制限エラー発生: ${req.query.id} - 3秒後に再試行`);
+      
+      try {
+        // 3秒待機後に再試行
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        const retryResponse = await axios.get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi`, {
+          params: {
+            db: 'pubmed',
+            id: req.query.id,
+            rettype: req.query.rettype || 'abstract',
+            retmode: 'text',
+            api_key: process.env.PUBMED_API_KEY
+          },
+          timeout: 15000
+        });
+        
+        console.log('PubMed フェッチ再試行成功');
+        
+        // 再試行成功
+        return res.json({ 
+          pmid: req.query.id,
+          abstract: retryResponse.data
+        });
+      } catch (retryError) {
+        console.error(`再試行も失敗:`, retryError.message);
+      }
+    }
     
     // 重要な修正: エラー処理でもリクエストから id を取得
     const requestId = req.query.id || 'unknown';
